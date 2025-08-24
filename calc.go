@@ -14727,6 +14727,68 @@ func matchPattern(findText, withinText string, dbcs bool, startNum int) (int, bo
 	return offset, utf8.RuneCountInString(withinText) != offset-1
 }
 
+// REGEXREPLACE The REGEXREPLACE function replaces strings within the
+// provided text that matches the pattern with replacement.
+// The syntax of the function is:
+//
+// REGEXREPLACE(text; pattern; replacement; [occurences]; [case_sensitivity])
+func (fn *formulaFuncs) REGEXREPLACE(argsList *list.List) formulaArg {
+	if argsList.Len() < 3 {
+		return newErrorFormulaArg(formulaErrorVALUE, "REGEXREPLACE requires 3 arguments")
+	}
+	if argsList.Len() > 5 {
+		return newErrorFormulaArg(formulaErrorVALUE, "REGEXREPLACE requires at most 5 arguments")
+	}
+
+	arg := argsList.Front()
+	text := arg.Value.(formulaArg).Value()
+	regexStr := arg.Next().Value.(formulaArg).Value()
+	replacement := arg.Next().Value.(formulaArg).Value()
+	occurences := 0
+	caseSensitive := true
+	if argsList.Len() > 3 {
+		occurences, err := strconv.Atoi(arg.Next().Value.(formulaArg).Value())
+		if err != nil {
+			return newErrorFormulaArg(formulaErrorVALUE, "REGEXREPLACE requires optional fourth argument of type number")
+		}
+
+		if occurences < 0 {
+			return newErrorFormulaArg(formulaErrorVALUE, "REGEXREPLACE requires optional fourth argument to be greater than or equal to 0")
+		}
+
+		if argsList.Len() > 4 {
+			caseSensitiveInt, err := strconv.Atoi(arg.Next().Value.(formulaArg).Value())
+			if err != nil {
+				return newErrorFormulaArg(formulaErrorVALUE, "REGEXREPLACE requires optional fifth argument of either 0 or 1")
+			}
+			if caseSensitiveInt != 0 && caseSensitiveInt != 1 {
+				return newErrorFormulaArg(formulaErrorVALUE, "REGEXREPLACE requires optional fifth argument of either 0 or 1")
+			}
+			caseSensitive = caseSensitiveInt == 1
+		}
+	}
+
+	if !caseSensitive {
+		regexStr = "(?i)" + regexStr
+	}
+	exp, err := regexp.Compile(regexStr)
+	if err != nil {
+		return newErrorFormulaArg(formulaErrorVALUE, "REGEXREPLACE requires second argument of valid regex-expression")
+	}
+	if occurences == 0 {
+		return newStringFormulaArg(exp.ReplaceAllLiteralString(text, replacement))
+	}
+
+	matches := 0
+	return newStringFormulaArg(exp.ReplaceAllStringFunc(text, func(s string) string {
+		if matches == occurences {
+			return s
+		}
+		matches++
+		return replacement
+	}))
+}
+
 // compareFormulaArg compares the left-hand sides and the right-hand sides'
 // formula arguments by given conditions such as case-sensitive, if exact
 // match, and make compare result as formula criteria condition type.
